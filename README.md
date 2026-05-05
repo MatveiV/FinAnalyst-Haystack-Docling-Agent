@@ -1,195 +1,200 @@
-# FinAnalyst Haystack-Agent Telegram Bot
+# Haystack-Docling-Agent — Финансовый Telegram-бот
 
-Умный финансовый ассистент на базе фреймворка **Haystack 2.x**, использующий **Pinecone** для долговременной памяти и **Telegram** как интерфейс взаимодействия. Предоставляет финансовые факты, анализ графиков и веб-поиск через Google.
+Финансовый ассистент на базе **Haystack 2.x** с долговременной памятью в **Pinecone** и интерфейсом через **Telegram**. Проект содержит две версии бота: монолитную v1 и модульную v2 с поддержкой загрузки документов через **Docling** (локальный OCR на PyTorch).
 
-## 🚀 Основные возможности
+## Версии бота
 
-- **Haystack 2.x Agent**: Современный агентный подход для построения сложных LLM-приложений.
-- **Долговременная память (Pinecone)**: Сохранение только текстовых сообщений пользователей в векторной базе данных с использованием `PineconeDocumentStore`.
-- **Инструменты (Tools)**:
-    - **Финансовые факты**: Получение актуальных данных через Alpha Vantage API (детерминированно, без случайности).
-    - **Анализ графиков**: Автоматическое получение графиков финансовых инструментов (через Finviz) и их глубокий анализ с помощью **OpenAI Vision (GPT-4o)**. Поддерживает запросы типа "Покажи график TSLA".
-    - **Веб-поиск**: Выполнение поиска в Google через SerperDevWebSearch API для получения актуальной информации.
-    - **Мультимодальность**: Бот умеет отправлять не только текст, но и изображения графиков с экспертными рекомендациями (Buy/Sell/Hold).
-- **Мультимодальность**: Бот умеет отправлять не только текст, но и изображения графиков с экспертными рекомендациями (Buy/Sell/Hold).
-- **Продвинутое логирование**: Использование **Loguru** для отслеживания работы инструментов и состояния системы.
-- **Поддержка ProxyAPI**: Настройка `OPENAI_BASE_URL` для обхода ограничений.
+| | v1 `hay/hay-tg_bot.py` | v2 `hay_v2_bot/` |
+|---|---|---|
+| Архитектура | один файл | модули `components/`, `pipelines/`, `bot/` |
+| Загрузка документов | нет | PDF, DOCX, PPTX, XLSX, HTML, Markdown (Docling) |
+| OCR / layout | нет | локально через PyTorch + Docling |
+| RAG по документам | нет | Haystack Pipeline: retriever → prompt → agent |
+| Ответ агента | прямой `Agent.run` | `Pipeline` + `AnswerBuilder` |
+| Память | Pinecone `chat-history` | Pinecone `chat-history` + `documents` |
+| Эмбеддинги | OpenAI через ProxyAPI | то же самое |
 
-## ⚙️ Настройка (Environment Variables)
+Обе версии используют один `.env` и один Pinecone-индекс (разные namespace). Можно запускать параллельно с разными `TELEGRAM_BOT_TOKEN`.
 
-Создайте или обновите файл `.env`:
+## Возможности
+
+- **RAG по загруженным файлам** (v2): Docling разбирает документ локально → чанки индексируются в Pinecone → LLM отвечает на вопросы по тексту.
+- **Финансовые факты**: актуальные новости через Alpha Vantage API.
+- **Анализ графиков**: автоматическое получение графика с Finviz и анализ через OpenAI Vision (GPT-4o). Поддерживает запросы вида «Покажи график TSLA».
+- **Веб-поиск**: SerperDev (Google) для актуальной информации.
+- **Долговременная память**: история диалога в Pinecone, фильтрация по `user_id`.
+- **Резюме документа** (v2): после индексации бот отправляет одно предложение-резюме (map-reduce через LLM).
+- **Команда `/clear`** (v2): удаление истории и документов пользователя из Pinecone.
+- **Логирование**: Loguru с префиксами `[torch]`, `[docling]`, `[embed]`, `[retrieve]`, `[rag]`, `[llm]`.
+
+## Структура проекта
+
+```
+Haystack-Docling-Agent/
+├── hay/
+│   └── hay-tg_bot.py          # v1: монолитный бот (Haystack Agent)
+├── hay_v2_bot/                 # v2: модульный бот
+│   ├── bot/
+│   │   └── telegram_bot.py    # обработчики Telegram
+│   ├── components/
+│   │   ├── context.py         # Pinecone stores + история
+│   │   └── tools.py           # инструменты агента, MetadataEnricher, суммаризация
+│   ├── pipelines/
+│   │   ├── ingestion_pipeline.py   # Docling → embed → Pinecone
+│   │   └── generation_pipeline.py  # embed query → retrieve → agent → answer
+│   ├── config.py              # Settings из .env
+│   ├── main.py                # точка входа
+│   ├── README.md              # документация v2
+│   └── ARCHITECTURE.md        # C4 и UML диаграммы
+├── bot.py                     # простой бот без Haystack (прототип)
+├── pinecone_manager.py        # утилита управления Pinecone-индексом
+├── requirements.txt
+├── .env                       # переменные окружения (не коммитить)
+└── logs/
+    ├── app.log
+    └── tools.log
+```
+
+## Настройка
+
+Создайте файл `.env` в корне репозитория:
 
 ```env
 # Pinecone
 PINECONE_API_KEY=ваш_ключ
-PINECONE_INDEX_NAME=haystack-agent
+PINECONE_INDEX_NAME=haystack-agent   # размерность индекса: 1536
 
 # OpenAI / ProxyAPI
 PROXY_API_KEY=ваш_ключ
-OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_BASE_URL=https://api.proxyapi.ru/openai/v1
 EMBEDDING_MODEL=text-embedding-3-small
 CHAT_MODEL=gpt-4o-mini
 
 # Telegram
 TELEGRAM_BOT_TOKEN=токен_от_BotFather
 
-# Alpha Vantage
+# Внешние API
 ALPHAVANTAGE_API_KEY=ваш_ключ_или_demo
-# SerperDevWebSearch (Google Search)
-SERPERDEV_API_KEY=ваш_serperdev_api_key
-# Finage Financial Data API
-FINAGE_API_KEY=ваш_finage_api_key
+SERPERDEV_API_KEY=ваш_ключ
 ```
 
-## 🛠 Запуск
+Опционально для v2: `VECTOR_DIMENSION` (по умолчанию `1536`), `RAG_TOP_K` (по умолчанию `5`), `SUMMARY_BATCH_MAX_CHARS` (по умолчанию `12000`).
 
-1. Установите зависимости:
+## Установка зависимостей
+
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Запустите бота:
+> **Примечание о venv:** пакеты `torch`, `docling` и `transformers` тяжёлые. Если используете `venv`, создайте его с флагом `--system-site-packages`, чтобы не дублировать уже установленные пакеты:
+> ```bash
+> python -m venv --system-site-packages venv
+> ```
+
+## Запуск
+
+### v2 (рекомендуется)
+
+```bash
+# Windows
+.\venv\Scripts\activate
+python -m hay_v2_bot.main
+
+# Linux / macOS
+source venv/bin/activate
+python -m hay_v2_bot.main
+```
+
+### v1
+
 ```bash
 python hay/hay-tg_bot.py
 ```
 
-## 📊 Логирование
+Логи пишутся в `logs/app.log` и `logs/tools.log`.
 
-Логи сохраняются в директории `logs/`:
-- `app.log`: Общие логи приложения.
-- `tools.log`: Детальные логи работы инструментов (фильтрация по тегу `tool`).
+## Локальная обработка документов (v2)
 
-## 🛠 Архитектура
+Разбор загруженного файла выполняется **полностью локально** — без облачного OCR API:
 
-### C4 System Context Diagram
+- **DoclingConverter** запускает ML-модели layout, таблиц и OCR через **PyTorch** (CPU или GPU)
+- Модели кэшируются в `~/.cache/docling/` при первом запуске
+- Чанкование — `HybridChunker` с `tiktoken` (только подсчёт токенов, без локального эмбеддинга)
+- Эмбеддинги чанков и запросов — через OpenAI-совместимый API (`OPENAI_BASE_URL`)
 
-<div align="center">
-<div style="background-color: white; padding: 20px; border-radius: 10px;">
+**Логи в терминале при работе v2:**
+
+```
+[torch]    PyTorch 2.x.x доступен, устройство: CPU
+[docling]  локальный разбор «report.pdf» (2048000 байт): Docling запускает ML-модели...
+[embed]    запрос эмбеддингов чанков через API: model=text-embedding-3-small — записано чанков: 42
+[embed]    эмбеддинг пользовательского запроса: model=text-embedding-3-small len=156
+[retrieve] Pinecone (cosine по векторам): получено чанков документов: 5
+[rag]      фрагмент #0 в промпт: file=report.pdf page=3 chunk=12 | "Текст фрагмента..."
+[llm]      ответ на основе промпта: превью "Ответ модели..."
+```
+
+## Архитектура (C4 System Context)
 
 ```mermaid
 C4Context
-    title System Context diagram for FinAnalyst Haystack-Agent
-    
-    Person(user, "Пользователь", "Отправляет финансовые запросы")
-    System_Ext(telegram_api, "Telegram API", "Мессенджер")
-    System(bot_system, "FinAnalyst Bot System", "Haystack Agent с финансовыми инструментами")
-    
-    System_Ext(openai_api, "OpenAI API", "Генерация ответов и анализ изображений")
-    System_Ext(pinecone_db, "Pinecone DB", "Векторная БД для долговременной памяти")
-    System_Ext(alpha_vantage, "Alpha Vantage API", "Финансовые данные и новости")
-    System_Ext(finviz_api, "Finviz API", "Финансовые графики")
-    System_Ext(serperdev_api, "SerperDev API", "Google веб-поиск")
+    title SystemContext — Haystack-Docling-Agent
 
-    Rel(user, telegram_api, "Финансовые запросы", "HTTPS")
-    Rel_D(telegram_api, bot_system, "Запрос", "HTTPS")
-    
-    Rel_R(bot_system, openai_api, "REST")
-    Rel_L(bot_system, pinecone_db, "gRPC")
-    Rel_R(bot_system, alpha_vantage, "REST")
-    Rel_R(bot_system, finviz_api, "HTTP")
-    Rel_R(bot_system, serperdev_api, "REST")
-    
-    Rel_U(bot_system, telegram_api, "Ответы и графики", "HTTPS")
+    Person(user, "Пользователь", "Отправляет текст и файлы в Telegram")
+
+    System_Boundary(bots, "Haystack-Docling-Agent") {
+        System(v1bot, "hay-tg_bot (v1)", "Монолитный бот: Haystack Agent, финансовые инструменты")
+        System(v2bot, "hay_v2_bot (v2)", "Модульный бот: Docling OCR, RAG, Haystack Pipelines")
+    }
+
+    System_Ext(telegram, "Telegram Bot API", "Доставка сообщений и файлов")
+    System_Ext(openai,   "OpenAI-compatible API", "Эмбеддинги и LLM (через OPENAI_BASE_URL)")
+    System_Ext(pinecone, "Pinecone", "Векторное хранилище (chat-history + documents)")
+    System_Ext(serper,   "SerperDev", "Веб-поиск")
+    System_Ext(alpha,    "Alpha Vantage", "Финансовые новости")
+    System_Ext(finviz,   "Finviz", "URL графиков для Vision-анализа")
+
+    Rel(user,    telegram, "HTTPS, чат")
+    Rel(telegram, v1bot,  "long polling")
+    Rel(telegram, v2bot,  "long polling")
+    Rel(v1bot,   openai,  "embeddings + chat")
+    Rel(v2bot,   openai,  "embeddings + chat")
+    Rel(v1bot,   pinecone,"векторы chat-history")
+    Rel(v2bot,   pinecone,"векторы chat-history + documents")
+    Rel(v1bot,   serper,  "веб-поиск")
+    Rel(v2bot,   serper,  "веб-поиск")
+    Rel(v1bot,   alpha,   "финновости")
+    Rel(v2bot,   alpha,   "финновости")
+    Rel(v1bot,   finviz,  "URL графика")
+    Rel(v2bot,   finviz,  "URL графика")
 ```
 
-</div>
-</div>
+Подробные диаграммы C4 Container и UML Sequence — в [hay_v2_bot/ARCHITECTURE.md](hay_v2_bot/ARCHITECTURE.md).
 
-### UML Sequence Diagram: Финансовый анализ и "Умная память"
+## Логирование
 
-<div align="center">
-<div style="background-color: white; padding: 20px; border-radius: 10px;">
+Логи сохраняются в `logs/`:
+- `app.log` — общие логи приложения (ротация 500 МБ)
+- `tools.log` — детальные логи работы инструментов агента
 
-```mermaid
-sequenceDiagram
-    participant U as Пользователь
-    participant B as Telegram Bot
-    participant HA as Haystack Agent
-    participant PM as PineconeManager
-    participant OA as OpenAI API
-    participant P as Pinecone DB
-    participant AV as Alpha Vantage
-    participant FV as Finviz
-    participant SD as SerperDev
+## Скриншоты
 
-    U->>B: Запрос "Покажи график TSLA"
-    B->>HA: Передача запроса
-    
-    alt Финансовый анализ
-        HA->>AV: Получить данные TSLA
-        AV-->>HA: Финансовые данные
-        HA->>FV: Получить график TSLA
-        FV-->>HA: Изображение графика
-        HA->>OA: Анализ изображения (GPT-4o Vision)
-        OA-->>HA: Рекомендация Buy/Sell/Hold
-    end
-    
-    alt Веб-поиск
-        HA->>SD: Поиск "TSLA последние новости"
-        SD-->>HA: Результаты поиска
-    end
-    
-    alt Умная память
-        HA->>PM: upsert_document("Покажи график TSLA")
-        PM->>OA: create_embedding
-        OA-->>PM: vector
-        
-        PM->>P: query (найти самый похожий)
-        P-->>PM: match (score: 0.94)
-        
-        Note over PM: THRESHOLD = 0.9
-        
-        alt score > 0.9
-            PM->>P: upsert (ID существующего вектора)
-            PM-->>HA: {action: "updated", score: 0.94}
-        else score <= 0.9
-            PM->>P: upsert (новый ID)
-            PM-->>HA: {action: "inserted"}
-        end
-    end
-    
-    HA->>B: Ответ с графиком и рекомендацией
-    B->>U: Отправка ответа пользователю
-```
+### v1 — hay-tg_bot
 
-</div>
-</div>
-
-## 📦 Установка и Запуск
-
-1. **Установите зависимости**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Проверьте ядро (PineconeManager)**:
-   ```bash
-   python pinecone_manager.py
-   ```
-   *Запустится встроенный тест: проверка связи, запись документа и проверка дубликата.*
-
-3. **Запустите бота**:
-   ```bash
-   python hay/hay-tg_bot.py
-   ```
-
-## 📂 Структура проекта
-
-- [hay/hay-tg_bot.py](file:///c:/GitHub/Haystack-Agent/hay/hay-tg_bot.py): Основной Telegram-бот с Haystack Agent, инструментами финансового анализа и веб-поиска.
-- [pinecone_manager.py](file:///c:/GitHub/Haystack-Agent/pinecone_manager.py): Класс `PineconeManager` с логикой косинусного сходства и поддержкой OpenAI.
-- [requirements.txt](file:///c:/GitHub/Haystack-Agent/requirements.txt): Зависимости проекта.
-- [.env](file:///c:/GitHub/Haystack-Agent/.env): Конфигурация (необходимо создать).
-- [bot.py](file:///c:/GitHub/Haystack-Agent/bot.py): Альтернативный Telegram-бот (простая реализация без Haystack агента).
-
-## 🖼 Скриншоты работы
-
-### Интерфейс Telegram-бота
-| FinAnalyst Bot | Financial Forecast | Pinecone Index |
+| Telegram-бот | Финансовый прогноз | Pinecone Index |
 |:---:|:---:|:---:|
-| ![FinAnalyst Bot](Screenshots/FinAnalyst%20Telegram%20bot.png) | ![Financial Forecast](Screenshots/FinForecastAAPL.png) | ![Pinecone Index](Screenshots/Pinecone%20znaika3%20index.png) |
+| ![Bot](Screenshots1/FinAnalyst%20Telegram%20bot.png) | ![Forecast](Screenshots1/FinForecastAAPL.png) | ![Pinecone](Screenshots1/Pinecone%20znaika3%20index.png) |
 
-### Работа в терминале (Логирование)
-![Terminal](Screenshots/Terminal%20hay-tg_bot.png)
+| Терминал (запуск) | Терминал (работа) |
+|:---:|:---:|
+| ![Terminal start](Screenshots1/Terminal%20hay-tg_bot%20start.png) | ![Terminal](Screenshots1/Terminal%20hay-tg_bot.png) |
 
-### Панель управления Pinecone
-![Pinecone Index](Screenshots/Pinecone%20znaika3%20index.png)
+### v2 — hay_v2_bot (Docling + RAG)
+
+| Загрузка PDF | Загрузка книги | Вопрос по документу |
+|:---:|:---:|:---:|
+| ![Upload PDF](ScreenshotsDocling/%D0%A2%D0%B3%20%D0%97%D0%B0%D0%BA%D1%80%D1%83%D0%B7%D0%BA%D0%B0%20%D1%84%D0%B0%D0%B9%D0%BB%D0%B0%20pdf.png) | ![Upload book](ScreenshotsDocling/%D0%A2%D0%B3%20%D0%97%D0%B0%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B0%20%D1%84%D0%B0%D0%B9%D0%BB%D0%B0%20%D0%BA%D0%BD%D0%B8%D0%B3%D0%B8%20%D0%A8%D0%B5%D0%B5%D1%80.png) | ![Question](ScreenshotsDocling/%D0%A2%D0%B3%20%D0%92%D0%BE%D0%BF%D1%80%D0%BE%D1%81%20%D0%BE%20%D0%B4%D0%B5%D1%82%D0%B0%D0%BB%D1%8F%D1%85%20%D0%B2%20%D0%BA%D0%BD%D0%B8%D0%B3%D0%B5.png) |
+
+| Терминал OCR | Терминал (ответы) | Pinecone (индекс) |
+|:---:|:---:|:---:|
+| ![OCR](ScreenshotsDocling/Terminal_OCRPdf.png) | ![Answers](ScreenshotsDocling/Terminal_BotAnswers.png) | ![Pinecone](ScreenshotsDocling/Pinecone-indexes-znaika3-browser-2026-05-05-20_01_28.png) |

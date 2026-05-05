@@ -7,3 +7,8 @@ pinecone-haystack
 requests
 loguru
 serpapi
+docling
+docling-haystack
+docling-core
+tiktoken
+torch
