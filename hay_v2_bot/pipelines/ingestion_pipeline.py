@@ -63,3 +63,38 @@ def build_ingestion_pipeline(documents_store: PineconeDocumentStore, settings: S
     pipe.connect("metadata_enricher.documents", "doc_embedder.documents")
     pipe.connect("doc_embedder.documents", "writer.documents")
     return pipe
+
+
+def convert_to_chunks(
+    sources: list[str],
+    filename: str,
+    user_id: str,
+) -> list:
+    """Run only Docling conversion + metadata enrichment locally, return plain Document list.
+
+    Used to obtain chunk texts for summarization *before* embedding them into Pinecone.
+    No network calls are made here — pure local PyTorch inference.
+    """
+    DoclingConverter, ExportType = _load_docling_converter_types()
+
+    converter = DoclingConverter(
+        export_type=ExportType.DOC_CHUNKS,
+        chunker=build_docling_chunker(),
+    )
+    enricher = MetadataEnricher()
+
+    conv_result = converter.run(
+        sources=sources,
+        meta={"user_id": user_id, "filename": filename},
+    )
+    raw_docs = conv_result.get("documents") or []
+    logger.info("[docling] конвертация завершена: {} чанков до эмбеддинга", len(raw_docs))
+
+    enrich_result = enricher.run(
+        documents=raw_docs,
+        filename=filename,
+        user_id=user_id,
+    )
+    chunks = enrich_result.get("documents") or []
+    logger.info("[docling] после MetadataEnricher: {} чанков готово для суммаризации", len(chunks))
+    return chunks

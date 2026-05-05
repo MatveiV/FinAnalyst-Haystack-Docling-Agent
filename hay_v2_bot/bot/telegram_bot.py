@@ -22,6 +22,7 @@ from hay_v2_bot.components.context import (
 )
 from hay_v2_bot.components.tools import summarize_documents
 from hay_v2_bot.config import Settings
+from hay_v2_bot.pipelines.ingestion_pipeline import convert_to_chunks
 
 
 def _format_dialog_for_prompt(messages: list[ChatMessage]) -> str:
@@ -127,6 +128,25 @@ def build_bot(
             len(data),
         )
 
+        # ── Шаг 1: локальная конвертация Docling → чанки (без сети) ──────────
+        try:
+            chunks = convert_to_chunks(
+                sources=[str(local_path)],
+                filename=orig_name,
+                user_id=uid,
+            )
+        except Exception as e:
+            logger.exception("docling conversion failed")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            bot.reply_to(message, f"Ошибка при разборе файла: {e}")
+            return
+
+        if not chunks:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            bot.reply_to(message, "Не удалось извлечь текст из файла. Убедитесь, что файл не пустой и поддерживается Docling.")
+            return
+
+        # ── Шаг 2: эмбеддинги + запись в Pinecone (через пайплайн) ──────────
         try:
             ingest_res = ingestion_pipeline.run(
                 {
@@ -138,9 +158,6 @@ def build_bot(
                 }
             )
             written = (ingest_res.get("writer") or {}).get("documents_written", 0)
-            chunks = (ingest_res.get("doc_embedder") or {}).get("documents") or (
-                ingest_res.get("metadata_enricher") or {}
-            ).get("documents")
             logger.info(
                 "[embed] запрос эмбеддингов чанков через API: model={} base_url={} — записано чанков в Pinecone: {}",
                 settings.embedding_model,
@@ -149,7 +166,8 @@ def build_bot(
             )
         except Exception as e:
             logger.exception("ingestion failed")
-            bot.reply_to(message, f"Ошибка при обработке файла: {e}")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            bot.reply_to(message, f"Ошибка при индексации файла: {e}")
             return
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
