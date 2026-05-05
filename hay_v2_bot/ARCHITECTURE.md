@@ -9,6 +9,7 @@
 Показывает `hay_v2_bot` среди внешних систем и пользователя.
 
 ```mermaid
+%%{init: {'theme': 'default'}}%%
 C4Context
     title SystemContext — hay_v2_bot и окружение
 
@@ -35,6 +36,7 @@ C4Context
 Логические части приложения (каталоги и пайплайны), граница системы — один процесс Python.
 
 ```mermaid
+%%{init: {'theme': 'default'}}%%
 C4Container
     title ContainerDiagram — внутренняя структура hay_v2_bot
 
@@ -72,6 +74,7 @@ C4Container
 ### UML: последовательность — загрузка файла, индексация, резюме
 
 ```mermaid
+%%{init: {'theme': 'default'}}%%
 sequenceDiagram
     autonumber
     participant User as Пользователь
@@ -107,6 +110,7 @@ sequenceDiagram
 ### UML: последовательность — текстовый вопрос с RAG
 
 ```mermaid
+%%{init: {'theme': 'default'}}%%
 sequenceDiagram
     autonumber
     participant User as Пользователь
@@ -147,6 +151,7 @@ sequenceDiagram
 ### UML: компоненты модулей (упрощённый component view)
 
 ```mermaid
+%%{init: {'theme': 'default'}}%%
 flowchart TB
     subgraph entry [Запуск]
         M[main.py]
@@ -193,6 +198,7 @@ Retriever в generation-пайплайне читает **только** `docume
 ## Ingestion pipeline
 
 ```mermaid
+%%{init: {'theme': 'default'}}%%
 graph LR
     sources[sources + meta] --> Docling[DoclingConverter DOC_CHUNKS]
     Docling --> Enrich[MetadataEnricher]
@@ -210,6 +216,7 @@ graph LR
 ## Generation pipeline
 
 ```mermaid
+%%{init: {'theme': 'default'}}%%
 graph LR
     Q[text user query] --> TE[OpenAITextEmbedder]
     TE --> R[PineconeEmbeddingRetriever filters user_id]
